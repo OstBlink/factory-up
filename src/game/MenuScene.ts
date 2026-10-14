@@ -8,7 +8,7 @@ import type { ItemId } from './sim/types';
 import { Sound } from './Sound';
 import { makeButton, makePanel, textStyle } from './ui/widgets';
 
-export const GAME_TITLE = 'Конвейерия';
+export const GAME_TITLE = 'Factory UP!';
 
 /** Ряд фоновой ленты с бегущими предметами. */
 interface BgRow {
