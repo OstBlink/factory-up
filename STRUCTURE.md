@@ -5,7 +5,7 @@
 ## Как всё связано
 
 ```
-main.ts → config.ts → BootScene → MenuScene → GameScene + UIScene
+main.ts → config.ts → BootScene → MenuScene → GameScene + UIScene (+ PauseScene поверх)
                                                │
                          sim/ (правила игры, без Phaser) ← World.ts
 ```
@@ -21,7 +21,7 @@ src/
   style.css
   game/
     balance.ts  config.ts  BootScene.ts  MenuScene.ts  GameScene.ts
-    UIScene.ts  WorldView.ts  Sound.ts
+    UIScene.ts  PauseScene.ts  WorldView.ts  Sound.ts
     sim/  types.ts  World.ts  Belts.ts  BeltRoute.ts  Buildings.ts  Logistics.ts
           Progression.ts  Goals.ts  Save.ts  MapCheck.ts
     ui/   widgets.ts  BuildMenu.ts  BuildingPanel.ts  RecipePicker.ts  UpgradeCards.ts
@@ -41,6 +41,7 @@ src/
 Все данные и числа игры. Функций нет, только константы:
 - **Карта:** `MAP_W`, `MAP_H`, `CELL`, положение и размер базы (`BASE_*`), `TICKS_PER_SECOND`.
 - **Камера:** `CAMERA_MAX_ZOOM`, `CAMERA_PAN_SPEED`, `CAMERA_ZOOM_STEP`, `CAMERA_EDGE_MARGIN`.
+- **Пауза:** `PAUSE_BLUR_STRENGTH` — сила размытия фона.
 - **Оформление:** `COLORS` (палитра) и `FONT`.
 - **Предметы:** `ITEMS` (название, метка, цвет, тир) и `TIER_XP` (опыт за предмет по тиру).
 - **Здания:** `BUILDINGS` (имя, размер, цвета, уровень открытия, способ выбора рецепта), `BUILD_MENU_ORDER`, параметры бура и `BUFFER_MAX`.
@@ -53,7 +54,7 @@ src/
 - **Сохранения и обучение:** `SAVE_KEY`, `SAVE_VERSION`, `AUTOSAVE_INTERVAL`, `TUTORIAL_LAST_HINT_TIME`.
 
 ## `src/game/config.ts`
-- **`createGame(parent)`** — создаёт `Phaser.Game`. Задаёт список сцен (`BootScene`, `MenuScene`, `GameScene`, `UIScene`), режим масштабирования `RESIZE` (игра на всё окно) и `roundPixels: true` для чёткой сетки.
+- **`createGame(parent)`** — создаёт `Phaser.Game`. Задаёт список сцен (`BootScene`, `MenuScene`, `GameScene`, `UIScene`, `PauseScene`), режим масштабирования `RESIZE` (игра на всё окно) и `roundPixels: true` для чёткой сетки.
 
 ---
 
@@ -296,7 +297,9 @@ src/
 - **`scheduleTutorialEnd()`** — через `TUTORIAL_LAST_HINT_TIME` секунд завершает обучение.
 
 **Ввод и режимы:**
-- **`setupInput()`** — клавиши Q, E, R, B/Tab, Esc; клики мыши; колесо.
+- **`setupInput()`** — клавиши Q, E, R, B/Tab, P, Esc; клики мыши; колесо.
+  - Esc срабатывает по очереди: закрыть окно → выйти из режима → открыть паузу.
+  - После паузы сбрасывает зажатые клавиши, чтобы камера не «ехала» сама.
 - **`ui()`** — ссылка на `UIScene`, если она уже запущена.
 - **`setMode(mode, type)`** — переключает режим (обычный, постройка, конвейер, удаление) и сообщает об этом HUD.
 - **`rotate()`** — в режимах постройки поворачивает выход (R). В обычном режиме поворачивает ленту под курсором.
@@ -326,7 +329,9 @@ src/
   - рамку объекта под курсором (красную в режиме удаления).
 - **`getGhost(type, dir)`** — создаёт призрак здания (подложка, корпус, стрелки портов). Пересоздаёт его только при смене типа или поворота.
 - **`save()`** — сохраняет мир и камеру.
-- **`exitToMenu()`** — сохраняет игру и уходит на стартовый экран.
+- **`openPause()`** — ставит на паузу саму сцену и HUD (`scene.pause`) и запускает поверх `PauseScene`. Приостановленная сцена не обновляется (симуляция, твины и таймеры стоят) и не получает ввод, но продолжает рисоваться.
+- **`exitToMenu()`** — сохраняет игру, закрывает паузу и HUD и уходит на стартовый экран.
+- **`restartGame()`** — удаляет сохранение, закрывает паузу и HUD и перезапускает сцену с новой игрой.
 
 **Функции вне класса:**
 - **`lineCells(x0, y0, x1, y1)`** — клетки на отрезке, чтобы удаление протяжкой не пропускало клетки при быстром движении мыши.
@@ -363,7 +368,7 @@ src/
 - **`create()`** — создаёт все элементы и окна (`BuildMenu`, `BuildingPanel`, `RecipePicker`, `UpgradeCards`). Подписывается на события `GameScene`, клавиши 1–4 и изменение размера окна.
 - **`createLevelPanel()`** — «Уровень N» и полоса опыта.
 - **`createGoalPanel()`** — панель задания: иконка, название, прогресс-бар, `x / y`.
-- **`createButtons()`** — кнопки «Постройки», «Строить», «Конвейер», «Удалить», «Звук», «Меню» и строка подсказки режима.
+- **`createButtons()`** — кнопки «Постройки», «Строить», «Конвейер», «Удалить», «Пауза (P)» и строка подсказки режима.
 - **`createMessages()`** — всплывающая подсказка (toast), крупное уведомление, плашка обучения.
 - **`layout()`, `layoutTutorial()`** — расставляют всё по текущему размеру экрана.
 - **`update()`** — каждый кадр:
@@ -380,6 +385,19 @@ src/
 - **`toggleBuildMenu()`** — открывает или закрывает меню построек (не во время выбора улучшения).
 - **`closePanels()`** — закрывает верхнее открытое окно (для Esc). Возвращает `false`, если закрывать нечего.
 - **`isPointerOverUI(pointer)`** — находится ли курсор над элементом интерфейса.
+
+### `PauseScene.ts` — окно паузы
+- **`gameScene`** (геттер) — ссылка на `GameScene`.
+- **`create()`** — размывает фон, строит окно, вешает клавиши P и Esc (продолжить; в вопросе «Вы уверены?» Esc — отмена). При изменении размера окна перестраивает его. При закрытии снимает размытие.
+- **`blurBackground()`** — добавляет фильтр Blur на камеры `GameScene` и `UIScene`.
+- **`removeBlur()`** — снимает эти фильтры.
+- **`build()`** — рисует затемнение (оно же ловит клики) и основное окно или вопрос подтверждения.
+- **`buildMain(w, h)`** — окно «Пауза»: «Продолжить (Esc)», «Звук: вкл/выкл», «Рестарт», «Выйти в меню».
+- **`buildConfirm(w, h)`** — «Вы уверены? Весь прогресс будет потерян.» с кнопками «Да, заново» (`restartGame`) и «Отмена».
+- **`showConfirm(show)`** — переключает основное окно и вопрос подтверждения.
+- **`toggleSoundButton()`** — включает или выключает звук и обновляет надпись.
+- **`resumeGame()`** — снимает размытие, продолжает `GameScene` и `UIScene` и закрывает паузу.
+- **`soundLabel()`** — надпись кнопки звука по текущему состоянию.
 
 ### `Sound.ts` — звуки через Web Audio
 - **`readEnabled()`** — читает настройку звука из `localStorage`.

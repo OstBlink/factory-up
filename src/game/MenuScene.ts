@@ -96,7 +96,7 @@ export class MenuScene extends Phaser.Scene {
     this.ui.push(fresh.container);
 
     const help = this.add.text(cx, cy + 115,
-      'WASD / стрелки — камера · колесо — зум · B — постройки · Q — конвейер\nE — удалить · R — поворот · Esc / ПКМ — выход из режима',
+      'WASD / стрелки — камера · колесо — зум · B — постройки · Q — конвейер\nE — удалить · R — поворот · Esc / ПКМ — выход из режима · P — пауза',
       { ...textStyle(13, COLORS.textDim), align: 'center', wordWrap: { width: panelW - 32 } }).setOrigin(0.5);
     this.ui.push(help);
   }

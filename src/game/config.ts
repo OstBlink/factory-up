@@ -4,6 +4,7 @@ import Phaser from 'phaser';
 import { BootScene } from './BootScene';
 import { GameScene } from './GameScene';
 import { MenuScene } from './MenuScene';
+import { PauseScene } from './PauseScene';
 import { UIScene } from './UIScene';
 
 export function createGame(parent: string): Phaser.Game {
@@ -11,8 +12,9 @@ export function createGame(parent: string): Phaser.Game {
     type: Phaser.AUTO,
     parent,
     backgroundColor: '#0f1115',
-    // BootScene рисует текстуры, MenuScene — стартовый экран, GameScene + UIScene — сама игра.
-    scene: [BootScene, MenuScene, GameScene, UIScene],
+    // BootScene рисует текстуры, MenuScene — стартовый экран, GameScene + UIScene — сама игра,
+    // PauseScene — окно паузы поверх всего.
+    scene: [BootScene, MenuScene, GameScene, UIScene, PauseScene],
     roundPixels: true,
     scale: {
       mode: Phaser.Scale.RESIZE,

@@ -7,7 +7,7 @@ import type { GameScene, Mode } from './GameScene';
 import { xpToNext } from './sim/Progression';
 import type { BuildingType, GameEvent, Machine } from './sim/types';
 import type { World } from './sim/World';
-import { isSoundOn, Sound, toggleSound } from './Sound';
+import { Sound } from './Sound';
 import { BuildMenu } from './ui/BuildMenu';
 import { BuildingPanel } from './ui/BuildingPanel';
 import { RecipePicker } from './ui/RecipePicker';
@@ -45,8 +45,7 @@ export class UIScene extends Phaser.Scene {
   private beltButton!: Button;
   private deleteButton!: Button;
   private menuToggle!: Button;
-  private soundButton!: Button;
-  private exitButton!: Button;
+  private pauseButton!: Button;
   private modeHint!: Phaser.GameObjects.Text;
 
   // Подсказки и уведомления
@@ -160,10 +159,7 @@ export class UIScene extends Phaser.Scene {
     this.buildButton = makeButton(this, 'Строить (B)', 140, 40, () => this.toggleBuildMenu(), 15);
     this.beltButton = makeButton(this, 'Конвейер (Q)', 140, 40, () => this.gameScene.setMode(this.gameScene.mode === 'belt' ? 'normal' : 'belt'), 15);
     this.deleteButton = makeButton(this, 'Удалить (E)', 140, 40, () => this.gameScene.setMode(this.gameScene.mode === 'delete' ? 'normal' : 'delete'), 15);
-    this.soundButton = makeButton(this, isSoundOn() ? 'Звук: вкл' : 'Звук: выкл', 110, 34, () => {
-      this.soundButton.label.setText(toggleSound() ? 'Звук: вкл' : 'Звук: выкл');
-    }, 13);
-    this.exitButton = makeButton(this, 'Меню', 80, 34, () => this.gameScene.exitToMenu(), 13);
+    this.pauseButton = makeButton(this, 'Пауза (P)', 120, 34, () => this.gameScene.openPause(), 13);
     this.modeHint = this.add.text(0, 0, '', textStyle(13, COLORS.textDim)).setOrigin(0.5, 1);
     this.modeHint.setStroke('#0f1115', 4);
   }
@@ -194,8 +190,7 @@ export class UIScene extends Phaser.Scene {
     this.menuToggle.container.setPosition(12, 88);
     this.buildMenu.layout(12, 130);
     this.buildingPanel.layout(w);
-    this.soundButton.container.setPosition(w - 210, 12);
-    this.exitButton.container.setPosition(w - 92, 12);
+    this.pauseButton.container.setPosition(w - 132, 12);
 
     const barW = 3 * 140 + 2 * 10;
     const bx = Math.round(w / 2 - barW / 2);

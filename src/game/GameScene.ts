@@ -7,7 +7,7 @@ import {
   CELL, COLORS, DEPOSITS, DEPOSIT_SIZE, MAP_H, MAP_W, TICKS_PER_SECOND, TUTORIAL_DEPOSIT, TUTORIAL_LAST_HINT_TIME,
 } from './balance';
 import { checkMap } from './sim/MapCheck';
-import { loadGame, saveGame } from './sim/Save';
+import { clearSave, loadGame, saveGame } from './sim/Save';
 import type { CameraState } from './sim/Save';
 import { canLayBelt, planBeltRoute } from './sim/BeltRoute';
 import type { PathCell } from './sim/BeltRoute';
@@ -310,9 +310,17 @@ export class GameScene extends Phaser.Scene {
     kb.on('keydown-R', () => this.rotate());
     kb.on('keydown-B', () => this.ui()?.toggleBuildMenu());
     kb.on('keydown-TAB', () => this.ui()?.toggleBuildMenu());
+    kb.on('keydown-P', () => this.openPause());
     kb.on('keydown-ESC', () => {
-      if (!this.ui()?.closePanels()) this.setMode('normal');
+      // Esc по очереди: закрыть окно → выйти из режима → пауза.
+      if (this.ui()?.closePanels()) return;
+      if (this.mode !== 'normal') this.setMode('normal');
+      else this.openPause();
     });
+    // Клавиши, отпущенные во время паузы, сцена не заметила — сбрасываем их, чтобы камера не «ехала» сама.
+    const resetKeys = () => kb.resetKeys();
+    this.events.on('resume', resetKeys);
+    this.events.once('shutdown', () => this.events.off('resume', resetKeys));
 
     this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', this.onPointerDown, this);
@@ -615,11 +623,30 @@ export class GameScene extends Phaser.Scene {
     saveGame(this.world, this.getCameraState());
   }
 
-  /** Вызывается из HUD: сохранить и выйти на стартовый экран. */
+  /** Пауза: игра и HUD останавливаются (но остаются видны), поверх открывается PauseScene. */
+  openPause(): void {
+    if (this.scene.isActive('PauseScene')) return;
+    this.drag = null;
+    this.scene.pause();
+    this.scene.pause('UIScene');
+    this.scene.launch('PauseScene');
+    this.scene.bringToTop('PauseScene');
+  }
+
+  /** Из окна паузы: сохранить и выйти на стартовый экран. */
   exitToMenu(): void {
     this.save();
+    this.scene.stop('PauseScene');
     this.scene.stop('UIScene');
     this.scene.start('MenuScene');
+  }
+
+  /** Из окна паузы: «Рестарт» — стереть сохранение и начать новую игру с нуля. */
+  restartGame(): void {
+    clearSave();
+    this.scene.stop('PauseScene');
+    this.scene.stop('UIScene');
+    this.scene.restart({ load: false });
   }
 }
 
