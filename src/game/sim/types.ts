@@ -145,7 +145,8 @@ export type GameEvent =
   | { type: 'goalDone'; item: ItemId; bonus: number }
   | { type: 'levelUp'; level: number }
   | { type: 'unlock'; types: BuildingType[] }
-  | { type: 'tutorial'; step: number };
+  | { type: 'tutorial'; step: number }
+  | { type: 'phase'; phase: number };
 
 /** Результат проверки места для постройки. */
 export interface PlaceCheck {

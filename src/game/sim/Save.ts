@@ -21,6 +21,8 @@ interface SaveData {
   upgradeChoices: string[] | null;
   goal: Goal;
   tutorial: number;
+  playTime: number;
+  phase: number;
   nextId: number;
   nextItemId: number;
   entities: Entity[];
@@ -37,6 +39,8 @@ export function saveGame(world: World, camera: CameraState | null): void {
     upgradeChoices: world.upgradeChoices,
     goal: world.goal,
     tutorial: world.tutorial,
+    playTime: world.playTime,
+    phase: world.phase,
     nextId: world.nextId,
     nextItemId: world.nextItemId,
     entities: [...world.entities.values()],
@@ -64,6 +68,8 @@ export function loadGame(): { world: World; camera: CameraState | null } | null 
     world.upgradeChoices = data.upgradeChoices ?? null;
     world.goal = data.goal;
     world.tutorial = data.tutorial ?? 0;
+    world.playTime = data.playTime ?? 0;
+    world.phase = data.phase ?? 1;
     world.nextId = data.nextId;
     world.nextItemId = data.nextItemId;
     for (const e of data.entities) world.addEntity(e);

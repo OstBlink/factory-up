@@ -3,7 +3,7 @@
 import {
   BELT_CAPACITY, BELT_SPEED, BUILDINGS, BUILD_MENU_ORDER, ITEMS, TIER_XP, UPGRADE_BELT_CAPACITY_STEP,
   UPGRADE_BELT_SPEED_STEP, UPGRADE_CHOICES, UPGRADE_OUTPUT_STEP, UPGRADE_SPEED_STEP, UPGRADE_WEIGHTS,
-  UPGRADE_XP_STEP, XP_BASE, XP_GROWTH,
+  PHASE2_SPEED_MULT, PHASE2_TIME, UPGRADE_XP_STEP, XP_BASE, XP_GROWTH,
 } from '../balance';
 import { MACHINE_TYPES } from './types';
 import type { BuildingType, ItemId, MachineType } from './types';
@@ -49,6 +49,23 @@ export function addXp(world: World, baseAmount: number): void {
 }
 
 // ---------------------------------------------------------------------------
+// Фазы игры: по игровому времени (world.playTime), паузы не считаются
+// ---------------------------------------------------------------------------
+
+/** Переход в фазу 2, когда игровое время дошло до PHASE2_TIME. Сообщает сценам событием 'phase'. */
+/** Ускорение от фазы: в фазе 2 всё работает в PHASE2_SPEED_MULT раз быстрее. */
+export function phaseSpeedMultiplier(world: World): number {
+  return world.phase >= 2 ? PHASE2_SPEED_MULT : 1;
+}
+
+export function checkPhase(world: World): void {
+  if (world.phase === 1 && world.playTime >= PHASE2_TIME) {
+    world.phase = 2;
+    world.events.push({ type: 'phase', phase: 2 });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Открытия по уровню (уровни открытия лежат в BUILDINGS[...].unlockLevel)
 // ---------------------------------------------------------------------------
 
@@ -70,9 +87,14 @@ function stacks(world: World, id: string): number {
   return world.upgrades[id] ?? 0;
 }
 
-/** Множитель скорости здания: две карточки по +15% дают ×1.30. */
-export function speedMultiplier(world: World, type: MachineType): number {
+/** Скорость здания от улучшений: две карточки по +15% дают ×1.30. */
+function upgradeSpeed(world: World, type: MachineType): number {
   return 1 + UPGRADE_SPEED_STEP * stacks(world, `speed:${type}`);
+}
+
+/** Итоговый множитель скорости здания: улучшения × ускорение фазы. */
+export function speedMultiplier(world: World, type: MachineType): number {
+  return upgradeSpeed(world, type) * phaseSpeedMultiplier(world);
 }
 
 /** Сколько предметов добавляется к выходу здания за цикл. */
@@ -81,7 +103,7 @@ export function outputBonus(world: World, type: MachineType): number {
 }
 
 export function beltSpeed(world: World): number {
-  return BELT_SPEED * (1 + UPGRADE_BELT_SPEED_STEP * stacks(world, 'beltSpeed'));
+  return BELT_SPEED * (1 + UPGRADE_BELT_SPEED_STEP * stacks(world, 'beltSpeed')) * phaseSpeedMultiplier(world);
 }
 
 export function beltCapacity(world: World): number {
@@ -131,7 +153,7 @@ export function describeUpgrade(world: World, id: string): { title: string; effe
   const type = target as MachineType;
 
   if (kind === 'speed') {
-    const now = speedMultiplier(world, type);
+    const now = upgradeSpeed(world, type); // на карточке — только вклад улучшений, без фазы
     const name = BUILDINGS[type].name;
     return {
       title: `Скорость: ${name}`,

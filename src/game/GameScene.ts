@@ -164,7 +164,7 @@ export class GameScene extends Phaser.Scene {
         this.view.popText(`Задание! +${formatNumber(ev.bonus)}`, '#9fe0b5', 22);
         Sound.goal();
       }
-      if (ev.type === 'levelUp') Sound.levelUp();
+      if (ev.type === 'levelUp' || ev.type === 'phase') Sound.levelUp();
       if (ev.type === 'unlock') this.time.delayedCall(300, () => Sound.unlock());
       if (ev.type === 'tutorial' && ev.step === 2) this.scheduleTutorialEnd();
       this.events.emit('sim', ev);

@@ -2,7 +2,7 @@
 // меню построек, панель здания, выбор рецепта, карточки улучшений, подсказки и обучение.
 
 import Phaser from 'phaser';
-import { BUILDINGS, COLORS, ITEMS } from './balance';
+import { BUILDINGS, COLORS, ITEMS, PHASE2_SPEED_MULT } from './balance';
 import type { GameScene, Mode } from './GameScene';
 import { xpToNext } from './sim/Progression';
 import type { BuildingType, GameEvent, Machine } from './sim/types';
@@ -12,7 +12,8 @@ import { BuildMenu } from './ui/BuildMenu';
 import { BuildingPanel } from './ui/BuildingPanel';
 import { RecipePicker } from './ui/RecipePicker';
 import { UpgradeCards } from './ui/UpgradeCards';
-import { formatNumber, makeButton, makePanel, textStyle } from './ui/widgets';
+import { GoalGuide } from './ui/GoalGuide';
+import { formatNumber, makeAttentionRing, makeButton, makePanel, pulseRing, stopRing, textStyle } from './ui/widgets';
 import type { Button } from './ui/widgets';
 
 /** Тексты обучения по шагам (шаг хранится в мире и сохраняется). */
@@ -54,7 +55,14 @@ export class UIScene extends Phaser.Scene {
   private tutorialBox!: Phaser.GameObjects.Container;
   private tutorialBg!: Phaser.GameObjects.Rectangle;
   private tutorialText!: Phaser.GameObjects.Text;
+  /** Пульсирующая рамка вокруг плашки обучения — чтобы на неё смотрели в первую очередь. */
+  private tutorialRing!: Phaser.GameObjects.Rectangle;
   private tutorialShown = -1;
+  private goalGuide!: GoalGuide;
+
+  // Верх справа: фаза и таймер игрового времени
+  private timerPanel!: Phaser.GameObjects.Container;
+  private timerText!: Phaser.GameObjects.Text;
   /** Уведомление об открытии ждёт, пока игрок выберет улучшение. */
   private pendingNotice = '';
 
@@ -81,7 +89,9 @@ export class UIScene extends Phaser.Scene {
     this.createLevelPanel();
     this.createGoalPanel();
     this.createButtons();
+    this.createTimer();
     this.createMessages();
+    this.goalGuide = new GoalGuide(this);
 
     this.buildMenu = new BuildMenu(this, (type) => this.pickBuilding(type));
     this.buildingPanel = new BuildingPanel(this, (id) => this.openRecipePicker(id));
@@ -164,6 +174,13 @@ export class UIScene extends Phaser.Scene {
     this.modeHint.setStroke('#0f1115', 4);
   }
 
+  private createTimer(): void {
+    this.timerPanel = this.add.container(0, 12);
+    const bg = makePanel(this, 150, 34);
+    this.timerText = this.add.text(75, 17, '', textStyle(14, COLORS.text, true)).setOrigin(0.5);
+    this.timerPanel.add([bg, this.timerText]);
+  }
+
   private createMessages(): void {
     this.toast = this.add.text(0, 0, '', { ...textStyle(15, '#ffd6d6', true), backgroundColor: '#2a1618', padding: { x: 12, y: 6 } })
       .setOrigin(0.5).setAlpha(0);
@@ -173,7 +190,8 @@ export class UIScene extends Phaser.Scene {
     this.tutorialBox = this.add.container(0, 0).setVisible(false);
     this.tutorialBg = makePanel(this, 400, 60, 0.97).setStrokeStyle(2, COLORS.accent);
     this.tutorialText = this.add.text(16, 12, '', { ...textStyle(15, COLORS.text, true), wordWrap: { width: 560 } });
-    this.tutorialBox.add([this.tutorialBg, this.tutorialText]);
+    this.tutorialRing = makeAttentionRing(this, COLORS.accent);
+    this.tutorialBox.add([this.tutorialRing, this.tutorialBg, this.tutorialText]);
   }
 
   // ---------------------------------------------------------------------------
@@ -191,6 +209,8 @@ export class UIScene extends Phaser.Scene {
     this.buildMenu.layout(12, 130);
     this.buildingPanel.layout(w);
     this.pauseButton.container.setPosition(w - 132, 12);
+    this.timerPanel.setPosition(w - 132 - 12 - 150, 12);
+    this.goalGuide.layout(w);
 
     const barW = 3 * 140 + 2 * 10;
     const bx = Math.round(w / 2 - barW / 2);
@@ -213,6 +233,7 @@ export class UIScene extends Phaser.Scene {
     const boxW = Math.min(maxW, this.tutorialText.width + 32);
     const boxH = this.tutorialText.height + 24;
     this.tutorialBg.setSize(boxW, boxH);
+    this.tutorialRing.setSize(boxW, boxH).setPosition(boxW / 2, boxH / 2);
     this.tutorialBox.setPosition(Math.round(w / 2 - boxW / 2), 90);
   }
 
@@ -247,8 +268,12 @@ export class UIScene extends Phaser.Scene {
       this.cards.show(world);
     }
 
+    // Фаза и игровое время (на паузе не идёт — время считает сама симуляция).
+    this.timerText.setText(`Фаза ${world.phase} · ${formatTime(world.playTime)}`);
+
     this.buildMenu.update(world);
     this.buildingPanel.update(world);
+    this.goalGuide.update(world);
     this.updateTutorial();
   }
 
@@ -259,13 +284,17 @@ export class UIScene extends Phaser.Scene {
     const text = TUTORIAL_TEXT[step];
     if (!text) {
       this.tweens.add({ targets: this.tutorialBox, alpha: 0, duration: 400, onComplete: () => this.tutorialBox.setVisible(false) });
+      stopRing(this, this.tutorialRing);
       return;
     }
     this.tutorialText.setText(text);
-    this.tutorialBg.setStrokeStyle(2, step === 2 ? COLORS.good : COLORS.accent);
+    const color = step === 2 ? COLORS.good : COLORS.accent;
+    this.tutorialBg.setStrokeStyle(2, color);
+    this.tutorialRing.setStrokeStyle(3, color);
     this.layoutTutorial();
     this.tutorialBox.setVisible(true).setAlpha(0);
     this.tweens.add({ targets: this.tutorialBox, alpha: 1, duration: 300 });
+    pulseRing(this, this.tutorialRing, -1);
   }
 
   // ---------------------------------------------------------------------------
@@ -313,6 +342,7 @@ ${text}` : text;
     if (ev.type === 'levelUp') {
       this.tweens.add({ targets: this.levelPanel, scale: 1.08, duration: 160, yoyo: true, ease: 'Quad.easeOut' });
     }
+    if (ev.type === 'phase') this.showPhase(ev.phase);
     if (ev.type === 'goalDone') {
       this.tweens.add({ targets: this.goalPanel, scale: 1.05, duration: 160, yoyo: true, ease: 'Quad.easeOut' });
       this.goalShown = 0;
@@ -330,6 +360,30 @@ ${text}` : text;
     this.tweens.killTweensOf(this.toast);
     this.toast.setAlpha(1);
     this.tweens.add({ targets: this.toast, alpha: 0, delay: 1300, duration: 400 });
+  }
+
+  /** Крупная надпись о начале новой фазы поверх всего экрана. */
+  private showPhase(phase: number): void {
+    const w = this.scale.width;
+    const y = Math.round(this.scale.height * 0.4);
+    const band = this.add.rectangle(w / 2, y, w, 150, 0x05070a, 0.85);
+    const title = this.add.text(w / 2, y - 22, `Фаза ${phase}`, textStyle(60, COLORS.accentText, true)).setOrigin(0.5);
+    title.setStroke('#0f1115', 8);
+    const sub = this.add.text(w / 2, y + 40, `Всё производство было ускорено в ${PHASE2_SPEED_MULT} раза`, textStyle(22, COLORS.text, true)).setOrigin(0.5);
+    const parts = [band, title, sub];
+    for (const o of parts) o.setDepth(70);
+
+    band.scaleY = 0;
+    title.setScale(0.3).setAlpha(0);
+    sub.setAlpha(0);
+    this.tweens.add({ targets: band, scaleY: 1, duration: 250, ease: 'Cubic.easeOut' });
+    this.tweens.add({ targets: title, scale: 1, alpha: 1, delay: 120, duration: 450, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: sub, alpha: 1, delay: 400, duration: 400 });
+    this.tweens.add({
+      targets: parts, alpha: 0, delay: 4000, duration: 600,
+      onComplete: () => parts.forEach((o) => o.destroy()),
+    });
+    this.tweens.add({ targets: this.timerPanel, scale: 1.12, duration: 200, yoyo: true, repeat: 3 });
   }
 
   private showNotice(text: string): void {
@@ -370,4 +424,15 @@ ${text}` : text;
   isPointerOverUI(pointer: Phaser.Input.Pointer): boolean {
     return this.input.hitTestPointer(pointer).length > 0;
   }
+}
+
+/** Время в виде мм:сс (или ч:мм:сс после часа игры). */
+function formatTime(seconds: number): string {
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(sec).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }

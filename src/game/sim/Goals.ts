@@ -4,6 +4,7 @@ import {
   DEPOSITS, FIRST_GOAL, GOAL_AMOUNT_GROWTH, GOAL_BASE_AMOUNT, GOAL_BONUS_MULT, GOAL_TIER_PREV_CHANCE,
   GOAL_TIER_TOP_CHANCE, ITEMS, RECIPES,
 } from '../balance';
+import type { Recipe } from '../balance';
 import { addXp, isUnlocked, itemXp, xpMultiplier } from './Progression';
 import type { Goal, ItemId } from './types';
 import type { World } from './World';
@@ -76,4 +77,22 @@ export function countDelivery(world: World, item: ItemId): void {
   world.events.push({ type: 'goalDone', item, bonus: bonus * xpMultiplier(world) });
   addXp(world, bonus);
   world.goal = nextGoal(world);
+}
+
+/**
+ * Как получить предмет: все шаги от сырья до него, без повторов, в порядке «сначала то, что нужно раньше».
+ * У сырья recipe = null (его добывает бур), у остальных — единственный рецепт, который его делает.
+ */
+export function howToMake(item: ItemId): { item: ItemId; recipe: Recipe | null }[] {
+  const steps: { item: ItemId; recipe: Recipe | null }[] = [];
+  const seen = new Set<ItemId>();
+  const visit = (it: ItemId): void => {
+    if (seen.has(it)) return;
+    seen.add(it);
+    const recipe = RECIPES.find((r) => r.output === it) ?? null;
+    if (recipe) for (const input of recipe.inputs) visit(input.item);
+    steps.push({ item: it, recipe });
+  };
+  visit(item);
+  return steps;
 }

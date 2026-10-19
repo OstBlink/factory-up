@@ -2,14 +2,14 @@
 // update() — один тик симуляции с фиксированным шагом (TICKS_PER_SECOND раз в секунду).
 
 import {
-  BASE_SIZE, BASE_X, BASE_Y, BUILDINGS, DEPOSITS, DEPOSIT_SIZE, MAP_H, MAP_W, OBSTACLES,
+  BASE_SIZE, BASE_X, BASE_Y, BUILDINGS, DEPOSITS, DEPOSIT_SIZE, MAP_H, MAP_W, OBSTACLES, TICKS_PER_SECOND,
 } from '../balance';
 import { advanceLane, forEachItemIn, placeItems } from './Belts';
 import { getRecipe, outputTarget, updateMachine } from './Buildings';
 import { countDelivery, firstGoal } from './Goals';
 import { updateBridge, updateMerger, updateSplitter } from './Logistics';
 import {
-  applyUpgrade, beltCapacity, beltSpeed, isUnlocked, rollUpgradeChoices,
+  applyUpgrade, beltCapacity, beltSpeed, checkPhase, isUnlocked, rollUpgradeChoices,
 } from './Progression';
 import { DX, DY, isMachineType, opposite, turnLeft, turnRight } from './types';
 import type {
@@ -33,6 +33,10 @@ export class World {
   goal: Goal = firstGoal();
   /** Шаг обучения: 0 — поставь бур, 1 — протяни ленту, 2 — финальная подсказка, 3 — пройдено. */
   tutorial = 0;
+  /** Игровое время в секундах: растёт только во время тиков, поэтому пауза его не двигает. */
+  playTime = 0;
+  /** Текущая фаза игры (1, затем 2 — см. checkPhase). */
+  phase = 1;
 
   // --- карта ---
   readonly terrain = new Uint8Array(MAP_W * MAP_H);
@@ -114,6 +118,8 @@ export class World {
 
   update(): void {
     if (this.isPaused()) return;
+    this.playTime += 1 / TICKS_PER_SECOND;
+    checkPhase(this);
     if (this.orderDirty) this.rebuildOrder();
 
     // Запоминаем, где предметы были до тика, — рендер плавно ведёт их к новым позициям.

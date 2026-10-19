@@ -75,3 +75,33 @@ export function makeButton(
     },
   };
 }
+
+/** Рамка «внимание»: расходящаяся и тающая обводка вокруг элемента. Размер задаётся через setSize. */
+export function makeAttentionRing(scene: Phaser.Scene, color: number): Phaser.GameObjects.Rectangle {
+  const ring = scene.add.rectangle(0, 0, 10, 10).setStrokeStyle(3, color).setVisible(false);
+  ring.setRounded(12);
+  return ring;
+}
+
+/** Запускает волну рамки: repeat = -1 — бесконечно, иначе столько дополнительных повторов. */
+export function pulseRing(scene: Phaser.Scene, ring: Phaser.GameObjects.Rectangle, repeat: number): void {
+  scene.tweens.killTweensOf(ring);
+  ring.setVisible(true).setScale(1).setAlpha(1);
+  // Рамка расходится на ~14 px с каждой стороны, независимо от размера элемента.
+  scene.tweens.add({
+    targets: ring,
+    scaleX: 1 + 28 / ring.width,
+    scaleY: 1 + 28 / ring.height,
+    alpha: 0,
+    duration: 1100,
+    ease: 'Cubic.easeOut',
+    repeat,
+    onComplete: () => ring.setVisible(false),
+  });
+}
+
+/** Останавливает волну рамки. */
+export function stopRing(scene: Phaser.Scene, ring: Phaser.GameObjects.Rectangle): void {
+  scene.tweens.killTweensOf(ring);
+  ring.setVisible(false);
+}
