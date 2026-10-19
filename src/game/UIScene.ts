@@ -2,7 +2,7 @@
 // меню построек, панель здания, выбор рецепта, карточки улучшений, подсказки и обучение.
 
 import Phaser from 'phaser';
-import { BUILDINGS, COLORS, ITEMS, PHASE2_SPEED_MULT } from './balance';
+import { BUILDINGS, COLORS, ITEMS, PHASE2_LEVEL, PHASE2_SPEED_MULT } from './balance';
 import type { GameScene, Mode } from './GameScene';
 import { xpToNext } from './sim/Progression';
 import type { BuildingType, GameEvent, Machine } from './sim/types';
@@ -63,6 +63,8 @@ export class UIScene extends Phaser.Scene {
   // Верх справа: фаза и таймер игрового времени
   private timerPanel!: Phaser.GameObjects.Container;
   private timerText!: Phaser.GameObjects.Text;
+  /** Подсказка под таймером, как попасть в фазу 2 (видна только в фазе 1). */
+  private phaseHint!: Phaser.GameObjects.Text;
   /** Уведомление об открытии ждёт, пока игрок выберет улучшение. */
   private pendingNotice = '';
 
@@ -179,6 +181,10 @@ export class UIScene extends Phaser.Scene {
     const bg = makePanel(this, 150, 34);
     this.timerText = this.add.text(75, 17, '', textStyle(14, COLORS.text, true)).setOrigin(0.5);
     this.timerPanel.add([bg, this.timerText]);
+
+    this.phaseHint = this.add.text(0, 0, `Для перехода на фазу 2 получите ${PHASE2_LEVEL}-й уровень`,
+      textStyle(13, COLORS.accentText, true)).setOrigin(1, 0);
+    this.phaseHint.setStroke('#0f1115', 4);
   }
 
   private createMessages(): void {
@@ -210,6 +216,7 @@ export class UIScene extends Phaser.Scene {
     this.buildingPanel.layout(w);
     this.pauseButton.container.setPosition(w - 132, 12);
     this.timerPanel.setPosition(w - 132 - 12 - 150, 12);
+    this.phaseHint.setPosition(w - 12, 54);
     this.goalGuide.layout(w);
 
     const barW = 3 * 140 + 2 * 10;
@@ -270,6 +277,7 @@ export class UIScene extends Phaser.Scene {
 
     // Фаза и игровое время (на паузе не идёт — время считает сама симуляция).
     this.timerText.setText(`Фаза ${world.phase} · ${formatTime(world.playTime)}`);
+    this.phaseHint.setVisible(world.phase === 1);
 
     this.buildMenu.update(world);
     this.buildingPanel.update(world);

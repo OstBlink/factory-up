@@ -3,7 +3,7 @@
 import {
   BELT_CAPACITY, BELT_SPEED, BUILDINGS, BUILD_MENU_ORDER, ITEMS, TIER_XP, UPGRADE_BELT_CAPACITY_STEP,
   UPGRADE_BELT_SPEED_STEP, UPGRADE_CHOICES, UPGRADE_OUTPUT_STEP, UPGRADE_SPEED_STEP, UPGRADE_WEIGHTS,
-  PHASE2_SPEED_MULT, PHASE2_TIME, UPGRADE_XP_STEP, XP_BASE, XP_GROWTH,
+  PHASE2_LEVEL, PHASE2_SPEED_MULT, UPGRADE_XP_STEP, XP_BASE, XP_GROWTH,
 } from '../balance';
 import { MACHINE_TYPES } from './types';
 import type { BuildingType, ItemId, MachineType } from './types';
@@ -49,17 +49,21 @@ export function addXp(world: World, baseAmount: number): void {
 }
 
 // ---------------------------------------------------------------------------
-// Фазы игры: по игровому времени (world.playTime), паузы не считаются
+// Фазы игры: фаза 2 начинается, когда игрок достигает уровня PHASE2_LEVEL
 // ---------------------------------------------------------------------------
 
-/** Переход в фазу 2, когда игровое время дошло до PHASE2_TIME. Сообщает сценам событием 'phase'. */
 /** Ускорение от фазы: в фазе 2 всё работает в PHASE2_SPEED_MULT раз быстрее. */
 export function phaseSpeedMultiplier(world: World): number {
   return world.phase >= 2 ? PHASE2_SPEED_MULT : 1;
 }
 
+/**
+ * Переход в фазу 2 при достижении уровня PHASE2_LEVEL. Сообщает сценам событием 'phase'.
+ * Вызывается из тика мира, поэтому срабатывает сразу после выбора карточки улучшения
+ * (пока карточки на экране, мир на паузе) — надпись не накладывается на карточки.
+ */
 export function checkPhase(world: World): void {
-  if (world.phase === 1 && world.playTime >= PHASE2_TIME) {
+  if (world.phase === 1 && world.level >= PHASE2_LEVEL) {
     world.phase = 2;
     world.events.push({ type: 'phase', phase: 2 });
   }
