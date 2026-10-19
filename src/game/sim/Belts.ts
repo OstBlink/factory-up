@@ -2,9 +2,9 @@
 // сдвиг очереди предметов внутри клетки и расчёт координат предметов для отрисовки.
 
 import { TICKS_PER_SECOND } from '../balance';
-import { machineAccepts, addToInput } from './Buildings';
+import { addToInput, machineAccepts, outputTarget } from './Buildings';
 import { mergerRoom } from './Logistics';
-import { DX, DY, opposite } from './types';
+import { DX, DY, opposite, turnLeft, turnRight } from './types';
 import type { Belt, Dir, ItemId, MovingItem, Transport } from './types';
 import type { World } from './World';
 
@@ -211,6 +211,43 @@ export function placeItems(t: Transport): void {
       }
       break;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Уголки: как рисовать ленту
+// ---------------------------------------------------------------------------
+
+/** Подаёт ли постройка в клетке рядом с лентой b (со стороны side) предметы в эту ленту. */
+function feedsFrom(world: World, b: Belt, side: Dir): boolean {
+  const n = world.cellAt(b.x + DX[side], b.y + DY[side]);
+  if (n === null || n === 'base') return false;
+  const toBelt = opposite(side); // направление, в котором сосед должен отдавать предмет
+  switch (n.kind) {
+    case 'belt':
+    case 'merger':
+      return n.dir === toBelt;
+    case 'splitter':
+      return n.dir === toBelt || turnLeft(n.dir) === toBelt || turnRight(n.dir) === toBelt;
+    case 'bridge':
+      return true;
+    case 'machine': {
+      const t = outputTarget(n);
+      return n.dir === toBelt && t.x === b.x && t.y === b.y;
+    }
+  }
+}
+
+/**
+ * Форма ленты для отрисовки: 'left' / 'right' — уголок, вход с левого / правого бока;
+ * 'straight' — прямая. Уголок получается, если сзади в ленту ничего не входит, а сбоку — ровно один вход.
+ */
+export function beltShape(world: World, b: Belt): 'straight' | 'left' | 'right' {
+  if (feedsFrom(world, b, opposite(b.dir))) return 'straight';
+  const fromLeft = feedsFrom(world, b, turnLeft(b.dir));
+  const fromRight = feedsFrom(world, b, turnRight(b.dir));
+  if (fromLeft && !fromRight) return 'left';
+  if (fromRight && !fromLeft) return 'right';
+  return 'straight';
 }
 
 /** Вызывает fn для каждого предмета в клетке. */

@@ -134,6 +134,53 @@ export class BootScene extends Phaser.Scene {
         g.lineBetween(16, y, 22, y + 5);
       }
       g.generateTexture(`belt${k}`, CELL, CELL);
+
+      // Уголки: вход с левого бока (beltL) и с правого (beltR), выход вверх.
+      this.drawBeltCorner(g, k, false);
+      g.generateTexture(`beltL${k}`, CELL, CELL);
+      this.drawBeltCorner(g, k, true);
+      g.generateTexture(`beltR${k}`, CELL, CELL);
+    }
+  }
+
+  /**
+   * Уголок ленты: четверть кольца вокруг верхнего левого угла клетки (вход слева, выход вверх).
+   * mirror — отражение по горизонтали (вход справа). Шевроны стоят на тех же долях пути,
+   * что и у прямой ленты, поэтому на стыках анимация не «прыгает».
+   */
+  private drawBeltCorner(g: Phaser.GameObjects.Graphics, frame: number, mirror: boolean): void {
+    const mx = (x: number) => (mirror ? CELL - x : x);
+    // Точка на дуге радиуса r; angle = π/2 — левый край клетки (вход), 0 — верхний край (выход).
+    const at = (r: number, angle: number) => new Phaser.Math.Vector2(mx(r * Math.cos(angle)), r * Math.sin(angle));
+    const arc = (r: number) => {
+      const pts: Phaser.Math.Vector2[] = [];
+      for (let i = 0; i <= 12; i++) pts.push(at(r, (Math.PI / 2) * (i / 12)));
+      return pts;
+    };
+
+    g.clear();
+    g.fillStyle(COLORS.beltBase, 1);
+    g.fillPoints([...arc(CELL - 3), ...arc(3).reverse()], true);
+    g.lineStyle(2, 0x30343c, 1);
+    g.strokePoints(arc(4));
+    g.strokePoints(arc(CELL - 4));
+
+    g.lineStyle(2, COLORS.beltChevron, 1);
+    const r = CELL / 2;
+    for (let j = -1; j <= 2; j++) {
+      const u = j / 2 + frame / (2 * BELT_FRAMES); // доля пройденного пути, как у прямой ленты
+      const angle = (Math.PI / 2) * (1 - u);
+      const px = r * Math.cos(angle);
+      const py = r * Math.sin(angle);
+      const tx = Math.sin(angle); // направление движения
+      const ty = -Math.cos(angle);
+      const nx = Math.cos(angle); // поперёк ленты
+      const ny = Math.sin(angle);
+      const tip = { x: px, y: py };
+      const w1 = { x: px - tx * 5 + nx * 6, y: py - ty * 5 + ny * 6 };
+      const w2 = { x: px - tx * 5 - nx * 6, y: py - ty * 5 - ny * 6 };
+      g.lineBetween(mx(w1.x), w1.y, mx(tip.x), tip.y);
+      g.lineBetween(mx(tip.x), tip.y, mx(w2.x), w2.y);
     }
   }
 

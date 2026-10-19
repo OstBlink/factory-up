@@ -7,6 +7,7 @@ import {
   BASE_SIZE, BASE_X, BASE_Y, BUILDINGS, CELL, COLORS, DEPOSITS, DEPOSIT_SIZE, ITEMS, MAP_H, OBSTACLES, TUTORIAL_DEPOSIT,
 } from './balance';
 import { BELT_FRAMES, cellHash, mixColor } from './BootScene';
+import { beltShape } from './sim/Belts';
 import { getRecipe, portCell } from './sim/Buildings';
 import { DX, DY, opposite } from './sim/types';
 import type { Dir, Entity, Machine } from './sim/types';
@@ -31,6 +32,9 @@ export const DEPTH = {
   sign: 12,
 };
 
+/** Префикс текстуры ленты по её форме (кадры анимации: belt0..7, beltL0..7, beltR0..7). */
+export const BELT_TEXTURE = { straight: 'belt', left: 'beltL', right: 'beltR' } as const;
+
 /** Картинки одной постройки на карте. */
 interface EntityView {
   objects: Phaser.GameObjects.GameObject[];
@@ -52,7 +56,8 @@ function centerPx(x: number, y: number, size: number): { x: number; y: number } 
 
 export class WorldView {
   private views = new Map<number, EntityView>();
-  private beltImages: Phaser.GameObjects.Image[] = [];
+  /** Картинки лент и префикс их текстуры (прямая или уголок) — для анимации шевронов. */
+  private beltImages: { img: Phaser.GameObjects.Image; prefix: string }[] = [];
   private beltFrame = -1;
   private itemPool: Phaser.GameObjects.Image[] = [];
   private itemKeys: string[] = [];
@@ -117,8 +122,9 @@ export class WorldView {
       const below = d.y + DEPOSIT_SIZE < MAP_H - 2;
       const y = below ? (d.y + DEPOSIT_SIZE) * CELL + 14 : d.y * CELL - 14;
       const color = `#${mixColor(item.color, 0xffffff, 0.35).toString(16).padStart(6, '0')}`;
+      // Под лентами: проложенная рядом лента не будет перекрыта подписью.
       const label = this.scene.add.text(c.x, y, item.name, textStyle(16, color, true))
-        .setOrigin(0.5).setDepth(DEPTH.hint);
+        .setOrigin(0.5).setDepth(DEPTH.water);
       label.setStroke('#0f1115', 5);
     }
   }
@@ -176,11 +182,16 @@ export class WorldView {
         view.body.setAngle(e.dir * 90);
       }
     }
+    // Форма ленты зависит от соседей, поэтому пересчитываем её у всех лент после любого изменения.
     this.beltImages = [];
+    const frame = Math.max(0, this.beltFrame);
     for (const [id, view] of this.views) {
-      if (this.world.entities.get(id)?.kind === 'belt') this.beltImages.push(view.body);
+      const e = this.world.entities.get(id);
+      if (e?.kind !== 'belt') continue;
+      const prefix = BELT_TEXTURE[beltShape(this.world, e)];
+      view.body.setTexture(`${prefix}${frame}`);
+      this.beltImages.push({ img: view.body, prefix });
     }
-    this.beltFrame = -1;
   }
 
   private createView(e: Entity): EntityView {
@@ -247,8 +258,7 @@ export class WorldView {
     const frame = Math.floor(((time / 1000) * this.world.beltSpeed() * CELL) / pxPerFrame) % BELT_FRAMES;
     if (frame === this.beltFrame) return;
     this.beltFrame = frame;
-    const key = `belt${frame}`;
-    for (const img of this.beltImages) img.setTexture(key);
+    for (const b of this.beltImages) b.img.setTexture(`${b.prefix}${frame}`);
   }
 
   private updateMachines(time: number): void {

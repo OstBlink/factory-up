@@ -9,13 +9,15 @@ import {
 import { checkMap } from './sim/MapCheck';
 import { loadGame, saveGame } from './sim/Save';
 import type { CameraState } from './sim/Save';
-import { isMachineType, turnRight } from './sim/types';
+import { canLayBelt, planBeltRoute } from './sim/BeltRoute';
+import type { PathCell } from './sim/BeltRoute';
+import { isMachineType, opposite, turnLeft, turnRight } from './sim/types';
 import type { BuildingType, Dir } from './sim/types';
 import { TERRAIN_ROCK, TERRAIN_WATER, World } from './sim/World';
 import { Sound } from './Sound';
 import type { UIScene } from './UIScene';
 import { formatNumber } from './ui/widgets';
-import { DEPTH, WorldView, createPortArrows } from './WorldView';
+import { BELT_TEXTURE, DEPTH, WorldView, createPortArrows } from './WorldView';
 
 export type Mode = 'normal' | 'build' | 'belt' | 'delete';
 
@@ -71,6 +73,9 @@ export class GameScene extends Phaser.Scene {
   private ghost: Phaser.GameObjects.Container | null = null;
   private ghostKey = '';
   private beltGhosts: Phaser.GameObjects.Image[] = [];
+  /** Последний рассчитанный путь протяжки — пересчитываем, только если что-то изменилось. */
+  private routeKey = '';
+  private route: PathCell[] = [];
   private onUnload = () => this.save();
 
   constructor() {
@@ -89,6 +94,8 @@ export class GameScene extends Phaser.Scene {
     this.ghost = null;
     this.ghostKey = '';
     this.beltGhosts = [];
+    this.routeKey = '';
+    this.route = [];
     this.hoverX = -1;
     this.hoverY = -1;
   }
@@ -457,9 +464,22 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Ставит ленту по Г-образному пути (или одну клетку при простом клике). */
+  /**
+   * Путь протяжки от (sx, sy) до (ex, ey): Г-образный или в обход препятствий (см. sim/BeltRoute.ts).
+   * Поиск обхода не самый дешёвый, поэтому результат запоминается, пока не сдвинется курсор или мир.
+   */
+  private currentRoute(sx: number, sy: number, ex: number, ey: number): PathCell[] {
+    const key = `${sx},${sy},${ex},${ey},${this.rotation},${this.world.version}`;
+    if (key !== this.routeKey) {
+      this.routeKey = key;
+      this.route = planBeltRoute(this.world, sx, sy, ex, ey, this.rotation);
+    }
+    return this.route;
+  }
+
+  /** Ставит ленту по пути протяжки (или одну клетку при простом клике). */
   private placeBeltPath(sx: number, sy: number, ex: number, ey: number): void {
-    const path = beltPath(sx, sy, ex, ey, this.rotation);
+    const path = this.currentRoute(sx, sy, ex, ey);
     let placed = 0;
     let firstError = '';
     for (const c of path) {
@@ -525,15 +545,18 @@ export class GameScene extends Phaser.Scene {
 
     if (this.mode === 'belt') {
       const path = this.drag?.kind === 'belt'
-        ? beltPath(this.drag.startX, this.drag.startY, this.hoverX, this.hoverY, this.rotation)
+        ? this.currentRoute(this.drag.startX, this.drag.startY, this.hoverX, this.hoverY)
         : [{ x: this.hoverX, y: this.hoverY, dir: this.rotation }];
       path.forEach((c, i) => {
         if (i >= this.beltGhosts.length) {
           this.beltGhosts.push(this.add.image(0, 0, 'belt0').setDepth(DEPTH.ghost).setAlpha(0.7));
         }
-        const existing = this.world.cellAt(c.x, c.y);
-        const ok = (existing !== null && existing !== 'base' && existing.kind === 'belt') || this.world.checkPlace('belt', c.x, c.y).ok;
+        // На повороте призрак рисуется уголком: вход — со стороны предыдущей клетки.
+        const inSide = i > 0 ? opposite(path[i - 1].dir) : opposite(c.dir);
+        const shape = inSide === turnLeft(c.dir) ? 'left' : inSide === turnRight(c.dir) ? 'right' : 'straight';
+        const ok = canLayBelt(this.world, c.x, c.y);
         this.beltGhosts[i]
+          .setTexture(`${BELT_TEXTURE[shape]}0`)
           .setPosition((c.x + 0.5) * CELL, (c.y + 0.5) * CELL)
           .setAngle(c.dir * 90)
           .setTint(ok ? 0x9cffaa : 0xff6b6b)
@@ -603,35 +626,6 @@ export class GameScene extends Phaser.Scene {
 // ---------------------------------------------------------------------------
 // Вспомогательные функции
 // ---------------------------------------------------------------------------
-
-/**
- * Г-образный путь ленты от (sx, sy) до (ex, ey): сначала по длинной оси, потом поворот.
- * Направление каждой клетки — по ходу протяжки. Одна клетка — направление fallbackDir.
- */
-export function beltPath(sx: number, sy: number, ex: number, ey: number, fallbackDir: Dir): { x: number; y: number; dir: Dir }[] {
-  const dx = ex - sx;
-  const dy = ey - sy;
-  if (dx === 0 && dy === 0) return [{ x: sx, y: sy, dir: fallbackDir }];
-  const hDir: Dir = dx > 0 ? 1 : 3;
-  const vDir: Dir = dy > 0 ? 2 : 0;
-  const cells: { x: number; y: number; dir: Dir }[] = [];
-
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    for (let x = sx; x !== ex; x += Math.sign(dx)) cells.push({ x, y: sy, dir: hDir });
-    // Угловая клетка уже смотрит в сторону второго отрезка.
-    for (let y = sy; ; y += Math.sign(dy)) {
-      cells.push({ x: ex, y, dir: dy === 0 ? hDir : vDir });
-      if (y === ey) break;
-    }
-  } else {
-    for (let y = sy; y !== ey; y += Math.sign(dy)) cells.push({ x: sx, y, dir: vDir });
-    for (let x = sx; ; x += Math.sign(dx)) {
-      cells.push({ x, y: ey, dir: dx === 0 ? vDir : hDir });
-      if (x === ex) break;
-    }
-  }
-  return cells;
-}
 
 /** Клетки на отрезке (для удаления протяжкой без пропусков при быстром движении мыши). */
 function lineCells(x0: number, y0: number, x1: number, y1: number): { x: number; y: number }[] {
